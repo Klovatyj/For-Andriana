@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE OS v10.0 - Ultimate Force</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Montserrat:wght@300;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { 
+            --neon: #ff007f; 
+            --gold: #ffcc00; 
+            --bg: #0a0510; 
+            --admin-clr: #00ff41;
+            --rare: #0070dd;
+            --epic: #a335ee;
+            --legendary: #ff8000;
+        }
+        
+        body { 
+            background: var(--bg); 
+            color: #fff; 
+            font-family: 'Montserrat', sans-serif; 
+            margin: 0; 
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .hidden { display: none !important; }
+
+        button, .btn-click {
+            cursor: pointer !important;
+            position: relative;
+            z-index: 50 !important;
+            pointer-events: auto !important;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+        button:active { transform: scale(0.95); }
+
+        .main-container { max-width: 500px; margin: 0 auto; padding: 20px; }
+        .admin-wide { max-width: 1200px; margin: 0 auto; padding: 30px; }
+
+        .glass {
+            background: rgba(20, 10, 30, 0.8);
+            border: 1px solid rgba(255, 0, 127, 0.4);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .profile-img {
+            width: 120px; height: 120px;
+            border-radius: 50%;
+            border: 4px solid var(--neon);
+            box-shadow: 0 0 20px var(--neon);
+            object-fit: cover;
+            margin: 0 auto 15px;
+        }
+
+        .rarity-common { border-color: #666; color: #ccc; }
+        .rarity-rare { border-color: var(--rare); color: var(--rare); box-shadow: 0 0 10px var(--rare); }
+        .rarity-epic { border-color: var(--epic); color: var(--epic); box-shadow: 0 0 10px var(--epic); }
+        .rarity-legendary { border-color: var(--legendary); color: var(--legendary); box-shadow: 0 0 15px var(--legendary); }
+
+        .adm-input {
+            background: #000;
+            border: 1px solid var(--admin-clr);
+            color: var(--admin-clr);
+            padding: 12px;
+            width: 100%;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            outline: none;
+            font-family: monospace;
+        }
+        .adm-btn {
+            background: var(--admin-clr);
+            color: #000;
+            padding: 12px;
+            font-weight: 900;
+            width: 100%;
+            border-radius: 8px;
+            text-transform: uppercase;
+        }
+        .adm-card {
+            background: #000;
+            border: 1px solid #333;
+            padding: 20px;
+            border-radius: 12px;
+        }
+        .adm-range { accent-color: var(--admin-clr); width: 100%; cursor: pointer; }
+
+        @keyframes levelUpAnim {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; filter: hue-rotate(90deg); }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .lvl-up-overlay {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-family: 'Orbitron'; font-size: 5rem; font-weight: 900;
+            color: var(--gold); text-shadow: 0 0 30px var(--gold);
+            z-index: 100; pointer-events: none; animation: levelUpAnim 3s forwards;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="lvl-up-container"></div>
+
+    <div id="auth-screen" class="flex items-center justify-center min-h-screen">
+        <div class="glass w-full max-w-sm text-center">
+            <h1 class="font-[Orbitron] text-pink-500 text-3xl mb-8 tracking-widest">SYSTEM LOGIN</h1>
+            <input id="email" type="email" placeholder="EMAIL" class="adm-input" style="color:white; border-color:var(--neon)">
+            <input id="password" type="password" placeholder="PASSWORD" class="adm-input" style="color:white; border-color:var(--neon)">
+            <button onclick="login()" class="adm-btn !bg-pink-600 !text-white">ACCESS SYSTEM</button>
+        </div>
+    </div>
+
+    <div id="player-screen" class="hidden main-container pb-20">
+        <div class="text-center mb-8">
+            <img id="p-avatar" src="" class="profile-img">
+            <h2 id="p-username" class="font-[Orbitron] text-2xl font-bold uppercase tracking-wider">...</h2>
+            <div class="mt-4">
+                <div class="flex justify-between text-[10px] font-bold mb-1">
+                    <span class="text-pink-500">LVL <span id="p-lvl">1</span></span>
+                    <span id="p-exp-val">0 EXP</span>
+                </div>
+                <div class="w-full h-2 bg-gray-900 rounded-full overflow-hidden">
+                    <div id="p-bar" class="h-full bg-pink-600 transition-all duration-1000" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass text-center">
+            <p class="text-xs opacity-50 uppercase mb-1">Твій Баланс</p>
+            <h3 class="text-4xl font-black text-white" id="p-coins">0 🪙</h3>
+        </div>
+
+        <div id="wheel-wrap" class="hidden glass text-center border-yellow-500">
+            <p class="text-yellow-500 font-bold text-[10px] mb-4 uppercase">Стрічка Фортуни</p>
+            <div class="relative w-full h-20 bg-black border-2 border-yellow-600 rounded-xl overflow-hidden mb-4">
+                <div class="absolute left-1/2 top-0 bottom-0 w-1 bg-yellow-500 z-10 shadow-[0_0_10px_#ffcc00]"></div>
+                <div id="tape" class="absolute left-0 flex h-full transition-all"></div>
+            </div>
+            <button id="spin-btn" onclick="startSpin()" class="adm-btn !bg-yellow-600 !text-black !w-full">Крутити (<span id="p-w-price">100</span> 🪙)</button>
+        </div>
+
+        <div class="flex gap-4 mb-6 text-center border-b border-white/10">
+            <button onclick="showTab('q')" id="btn-q" class="flex-1 pb-4 border-b-2 border-pink-600 font-bold text-xs uppercase">Квести</button>
+            <button onclick="showTab('s')" id="btn-s" class="flex-1 pb-4 opacity-40 font-bold text-xs uppercase">Магазин</button>
+            <button onclick="showTab('a')" id="btn-a" class="flex-1 pb-4 opacity-40 font-bold text-xs uppercase">Ачівки</button>
+        </div>
+
+        <div id="tab-q" class="space-y-4"></div>
+        <div id="tab-s" class="hidden space-y-4"></div>
+        <div id="tab-a" class="hidden grid grid-cols-2 gap-4"></div>
+    </div>
+
+    <div id="admin-screen" class="hidden admin-wide">
+        <div class="flex justify-between items-center mb-8 border-b border-green-900 pb-4">
+            <h1 class="text-2xl font-black text-green-500 font-[Orbitron]">CORE ADMIN TERMINAL v10.0</h1>
+            <button onclick="logout()" class="text-red-500 font-bold hover:underline">[ВИЙТИ]</button>
+        </div>
+
+        <div class="grid lg:grid-cols-3 gap-8">
+            <div class="adm-card">
+                <h2 class="text-white font-bold mb-4 uppercase text-xs">1. Керування Гравцем</h2>
+                <div class="border-2 border-dashed border-green-800 p-4 text-center mb-4 rounded-xl cursor-pointer hover:bg-green-900/10" onclick="el('f-in').click()">
+                    <img id="adm-p-preview" class="w-16 h-16 rounded-full mx-auto mb-2 border border-green-500 hidden">
+                    <p class="text-[10px]" id="f-name">НАТИСНИ, ЩОБ ЗМІНИТИ ФОТО</p>
+                    <input type="file" id="f-in" class="hidden" accept="image/*" onchange="uploadAvatar(this.files[0])">
+                </div>
+                <input id="in-user" class="adm-input">
+                <button onclick="saveToDB('username', el('in-user').value)" class="adm-btn mb-4 !h-10 !text-[10px]">ОНОВИТИ ІМ'Я</button>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9px] text-gray-500">МОНЕТИ</label>
+                        <input id="in-coins" type="number" class="adm-input">
+                        <button onclick="saveToDB('coins', parseInt(el('in-coins').value) || 0)" class="adm-btn !h-10 !text-[10px]">ОНОВИТИ</button>
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-gray-500">EXP</label>
+                        <input id="in-exp" type="number" class="adm-input">
+                        <button onclick="saveToDB('exp', parseInt(el('in-exp').value) || 0)" class="adm-btn !h-10 !text-[10px]">ОНОВИТИ</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="adm-card">
+                <h2 class="text-white font-bold mb-4 uppercase text-xs">2. Рулетка</h2>
+                <div class="flex gap-2 mb-2">
+                    <input id="w-price" type="number" placeholder="Ціна спіна" class="adm-input">
+                    <button onclick="saveToDB('wheel_price', parseInt(el('w-price').value))" class="adm-btn !w-20">SET</button>
+                </div>
+                <button id="adm-w-toggle" onclick="toggleWheel()" class="adm-btn mb-4">УВІМКНУТИ РУЛЕТКУ</button>
+                <input id="w-label" placeholder="Назва призу" class="adm-input">
+                <input id="w-weight" type="number" placeholder="Шанс (напр. 10)" class="adm-input">
+                <button onclick="addWheelSector()" class="adm-btn">ДОДАТИ В СПИСОК</button>
+                <div id="adm-w-list" class="mt-4 space-y-1 max-h-40 overflow-y-auto"></div>
+            </div>
+
+            <div class="adm-card">
+                <h2 class="text-white font-bold mb-4 uppercase text-xs text-yellow-500">ОСТАННІ ВИГРАШІ</h2>
+                <div id="adm-w-history" class="space-y-1 text-[10px] font-mono"></div>
+            </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8 mt-8">
+             <div class="adm-card">
+                <h2 class="text-white font-bold mb-4 uppercase text-xs text-blue-500">4. Квести</h2>
+                <div class="flex gap-2">
+                    <input id="q-title" placeholder="Завдання" class="adm-input">
+                    <input id="q-goal" type="number" placeholder="Ціль" class="adm-input" style="width:80px">
+                    <input id="q-reward" type="number" placeholder="Нагорода" class="adm-input" style="width:80px">
+                </div>
+                <button onclick="addQuest()" class="adm-btn mb-4">СТВОРТИ КВЕСТ</button>
+                <div id="adm-q-list" class="space-y-4"></div>
+            </div>
+
+            <div class="adm-card">
+                <h2 class="text-white font-bold mb-4 uppercase text-xs">5. Ачівки</h2>
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                    <input id="a-title" placeholder="Назва" class="adm-input">
+                    <input id="a-reward" type="number" placeholder="🪙" class="adm-input">
+                </div>
+                <div class="flex items-center gap-2 mb-2 text-[10px] text-gray-400">
+                    <input type="checkbox" id="a-secret"> СЕКРЕТНА АЧІВКА?
+                </div>
+                <button onclick="createAchievement()" class="adm-btn mb-4">ДОДАТИ АЧІВКУ</button>
+                <div id="adm-a-list" class="grid grid-cols-2 gap-2"></div>
+            </div>
+        </div>
+
+        <div class="adm-card mt-8">
+            <h2 class="text-white font-bold mb-4 uppercase text-xs text-pink-500">6. Керування Магазином</h2>
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-4">
+                <input id="s-emoji" placeholder="Emoji (🎨)" class="adm-input">
+                <input id="s-name" placeholder="Назва товару" class="adm-input">
+                <input id="s-price" type="number" placeholder="Ціна 🪙" class="adm-input">
+                <select id="s-rarity" class="adm-input !bg-black">
+                    <option value="common">Common</option>
+                    <option value="rare">Rare</option>
+                    <option value="epic">Epic</option>
+                    <option value="legendary">Legendary</option>
+                </select>
+                <input id="s-desc" placeholder="Опис" class="adm-input">
+            </div>
+            <button onclick="addShopItem()" class="adm-btn">ДОДАТИ ТОВАР В МАГАЗИН</button>
+            <div id="adm-s-list" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6"></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCHMh0oWm7ZnEkDWRASFSnnziNQWTeWKoU",
+            authDomain: "mini-game-2.firebaseapp.com",
+            databaseURL: "https://mini-game-2-default-rtdb.firebaseio.com",
+            projectId: "mini-game-2",
+            storageBucket: "mini-game-2.firebasestorage.app",
+            messagingSenderId: "516441532353",
+            appId: "1:516441532353:web:77de7826e0e810fb293140"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const auth = firebase.auth();
+
+        let state = {};
+        let currentLvl = 1;
+
+        function login() {
+            auth.signInWithEmailAndPassword(el('email').value, el('password').value).catch(() => alert("Error"));
+        }
+        function logout() { auth.signOut().then(() => location.reload()); }
+
+        auth.onAuthStateChanged(user => {
+            if(user) {
+                el('auth-screen').classList.add('hidden');
+                const isAdmin = user.email === 'klovatyy@gmail.com';
+                el(isAdmin ? 'admin-screen' : 'player-screen').classList.remove('hidden');
+                db.ref('/').on('value', snap => {
+                    state = snap.val() || {};
+                    checkLevelUp(isAdmin);
+                    render(isAdmin);
+                });
+            }
+        });
+
+        function checkLevelUp(isAdmin) {
+            if(isAdmin) return;
+            const newLvl = Math.floor((state.exp || 0) / 1000) + 1;
+            if(newLvl > currentLvl && state.exp > 0) {
+                el('lvl-up-container').innerHTML = '<div class="lvl-up-overlay">LEVEL UP!</div>';
+                db.ref('coins').set((state.coins || 0) + 500); 
+                setTimeout(() => el('lvl-up-container').innerHTML = '', 3000);
+            }
+            currentLvl = newLvl;
+        }
+
+        function saveToDB(path, val) { db.ref(path).set(val); }
+
+        function uploadAvatar(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => db.ref('avatar').set(e.target.result);
+            reader.readAsDataURL(file);
+        }
+
+        function toggleWheel() { db.ref('wheel_active').set(!state.wheel_active); }
+
+        function addWheelSector() {
+            const label = el('w-label').value;
+            const weight = parseInt(el('w-weight').value) || 0;
+            if(label && weight) {
+                db.ref('wheel_sectors').push().set({label, weight});
+                el('w-label').value = ''; el('w-weight').value = '';
+            }
+        }
+
+        function createAchievement() {
+            const id = Date.now();
+            db.ref('achievements/'+id).set({
+                id, title: el('a-title').value, reward: parseInt(el('a-reward').value) || 0,
+                rarity: 'rare', unlocked: false, isSecret: el('a-secret').checked
+            });
+        }
+
+        function addQuest() {
+            const id = Date.now();
+            db.ref('quests/'+id).set({
+                id, title: el('q-title').value, goal: parseInt(el('q-goal').value) || 1, 
+                reward: parseInt(el('q-reward').value) || 0, current: 0
+            });
+        }
+
+        // ФУНКЦІЇ МАГАЗИНУ
+        function addShopItem() {
+            const id = Date.now();
+            db.ref('shop/'+id).set({
+                id, 
+                emoji: el('s-emoji').value || '🎁',
+                name: el('s-name').value || 'Товар',
+                price: parseInt(el('s-price').value) || 0,
+                rarity: el('s-rarity').value,
+                desc: el('s-desc').value || ''
+            });
+        }
+
+        function buyItem(id, price, name) {
+            if(state.coins < price) return alert("Недостатньо монет! 🪙");
+            if(confirm(`Купити "${name}" за ${price} 🪙?`)) {
+                db.ref('coins').set(state.coins - price);
+                alert("Успішно куплено!");
+            }
+        }
+
+        function startSpin() {
+            const price = state.wheel_price || 100;
+            if(state.coins < price) return alert("Мало монет!");
+            const sectors = Object.values(state.wheel_sectors || {});
+            if(!sectors.length) return;
+
+            db.ref('coins').set(state.coins - price);
+            const totalWeight = sectors.reduce((a, b) => a + (b.weight || 0), 0);
+            let rand = Math.random() * totalWeight;
+            let winIdx = 0;
+            for(let i=0; i<sectors.length; i++) {
+                rand -= sectors[i].weight;
+                if(rand <= 0) { winIdx = i; break; }
+            }
+
+            const tape = el('tape');
+            const finalPos = -( (winIdx * 100) + 50 + 2000 - (el('player-screen').offsetWidth/2) );
+            tape.style.transition = 'none'; tape.style.left = '0px';
+            
+            setTimeout(() => {
+                tape.style.transition = '5s cubic-bezier(0.1, 0, 0.1, 1)';
+                tape.style.left = finalPos + 'px';
+            }, 50);
+
+            el('spin-btn').disabled = true;
+            setTimeout(() => {
+                const winLabel = sectors[winIdx].label;
+                alert("ВИГРАШ: " + winLabel);
+                db.ref('wheel_history').push().set({label: winLabel, date: new Date().toLocaleTimeString()});
+                el('spin-btn').disabled = false;
+            }, 5500);
+        }
+
+        function render(isAdmin) {
+            if(isAdmin) {
+                el('in-user').value = state.username || '';
+                el('in-coins').value = state.coins || 0;
+                el('in-exp').value = state.exp || 0;
+                el('w-price').value = state.wheel_price || 100;
+
+                if(state.avatar) { el('adm-p-preview').src = state.avatar; el('adm-p-preview').classList.remove('hidden'); }
+                el('adm-w-toggle').innerText = state.wheel_active ? "ВИМКНУТИ РУЛЕТКУ" : "УВІМКНУТИ РУЛЕТКУ";
+                
+                // Адмін - Списки
+                const wh = el('adm-w-history'); wh.innerHTML = '';
+                if(state.wheel_history) Object.values(state.wheel_history).reverse().slice(0,10).forEach(h => {
+                    wh.innerHTML += `<div class="p-1 border-b border-white/5 text-green-500"><span class="opacity-50">[${h.date}]</span> ${h.label}</div>`;
+                });
+
+                const ql = el('adm-q-list'); ql.innerHTML = '';
+                if(state.quests) Object.values(state.quests).forEach(q => {
+                    ql.innerHTML += `<div class="bg-white/5 p-3 rounded-lg border border-blue-900"><p class="text-[10px] mb-2">${q.title} (${q.current}/${q.goal})</p><input type="range" min="0" max="${q.goal}" value="${q.current}" oninput="db.ref('quests/${q.id}/current').set(parseInt(this.value))" class="adm-range mb-2"><div class="flex gap-1"><button onclick="db.ref('coins').set((state.coins||0)+${q.reward}); db.ref('exp').set((state.exp||0)+200); db.ref('quests/${q.id}').remove()" class="adm-btn !py-1 !text-[9px]">DONE</button><button onclick="db.ref('quests/${q.id}').remove()" class="adm-btn !py-1 !text-[9px] !bg-red-600">DEL</button></div></div>`;
+                });
+
+                const al = el('adm-a-list'); al.innerHTML = '';
+                if(state.achievements) Object.values(state.achievements).forEach(a => {
+                    al.innerHTML += `<div class="bg-white/5 p-2 rounded border border-gray-700"><p class="text-[9px] uppercase font-bold">${a.isSecret ? '🤫 ' : ''}${a.title}</p><button onclick="db.ref('achievements/${a.id}/unlocked').set(true); db.ref('coins').set((state.coins||0)+${a.reward})" class="adm-btn !py-0.5 !text-[8px] mt-1">${a.unlocked ? '✅' : 'GIVE'}</button></div>`;
+                });
+
+                const sl = el('adm-s-list'); sl.innerHTML = '';
+                if(state.shop) Object.values(state.shop).forEach(i => {
+                    sl.innerHTML += `<div class="bg-white/5 p-3 rounded-lg border border-pink-900 text-center"><div class="text-2xl">${i.emoji}</div><p class="text-[10px] font-bold">${i.name}</p><p class="text-[8px] text-gray-500">${i.price} 🪙</p><button onclick="db.ref('shop/${i.id}').remove()" class="adm-btn !bg-red-900 !text-white !py-1 !mt-2 !text-[8px]">ВИДАЛИТИ</button></div>`;
+                });
+
+            } else {
+                // Рендер для Гравця
+                el('p-avatar').src = state.avatar || 'https://via.placeholder.com/150';
+                el('p-username').innerText = state.username || 'КОРОЛЕВА';
+                el('p-coins').innerText = (state.coins || 0) + ' 🪙';
+                el('p-exp-val').innerText = (state.exp || 0) + ' EXP';
+                el('p-lvl').innerText = Math.floor((state.exp || 0) / 1000) + 1;
+                el('p-bar').style.width = ((state.exp % 1000) / 10) + '%';
+                el('p-w-price').innerText = state.wheel_price || 100;
+
+                el('wheel-wrap').classList.toggle('hidden', !state.wheel_active);
+                if(state.wheel_active) {
+                    const t = el('tape'); t.innerHTML = '';
+                    const s = Object.values(state.wheel_sectors || {});
+                    for(let i=0; i<60; i++) {
+                        const it = s[i % s.length];
+                        t.innerHTML += `<div style="min-width:100px" class="h-full flex items-center justify-center border-r border-white/10 text-[9px] font-bold text-center p-2">${it ? it.label : '...'}</div>`;
+                    }
+                }
+
+                // Вкладка Магазин
+                const ts = el('tab-s'); ts.innerHTML = '';
+                if(state.shop) Object.values(state.shop).forEach(i => {
+                    ts.innerHTML += `<div class="glass border-2 rarity-${i.rarity} !p-4 flex items-center gap-4">
+                        <div class="text-4xl">${i.emoji}</div>
+                        <div class="flex-1">
+                            <h4 class="font-bold uppercase text-xs">${i.name}</h4>
+                            <p class="text-[9px] opacity-60">${i.desc}</p>
+                        </div>
+                        <button onclick="buyItem('${i.id}', ${i.price}, '${i.name}')" class="bg-white text-black px-3 py-2 rounded-lg font-black text-[10px]">${i.price} 🪙</button>
+                    </div>`;
+                });
+
+                // Вкладка Квести
+                const tq = el('tab-q'); tq.innerHTML = '';
+                if(state.quests) Object.values(state.quests).forEach(q => {
+                    tq.innerHTML += `<div class="glass"><p class="text-sm font-bold mb-1">${q.title}</p><div class="w-full h-1 bg-gray-800 rounded-full overflow-hidden"><div class="h-full bg-pink-600" style="width:${(q.current/q.goal)*100}%"></div></div><div class="flex justify-between mt-1 text-[9px] opacity-50"><span>${q.current}/${q.goal}</span><span>${q.reward} 🪙</span></div></div>`;
+                });
+
+                // Вкладка Ачівки
+                const ta = el('tab-a'); ta.innerHTML = '';
+                if(state.achievements) Object.values(state.achievements).forEach(a => {
+                    const isLockedSecret = a.isSecret && !a.unlocked;
+                    ta.innerHTML += `<div class="glass !p-4 text-center border-2 ${a.unlocked ? 'rarity-'+a.rarity : 'opacity-20 grayscale'}">
+                        <div class="text-xl mb-1">${a.unlocked ? '🏆' : '🔒'}</div>
+                        <p class="text-[9px] font-black uppercase">${isLockedSecret ? 'СЕКРЕТ' : a.title}</p></div>`;
+                });
+            }
+        }
+
+        function showTab(t) {
+            ['q','s','a'].forEach(x => { el('tab-'+x).classList.add('hidden'); el('btn-'+x).classList.add('opacity-40'); el('btn-'+x).classList.remove('border-b-2'); });
+            el('tab-'+t).classList.remove('hidden'); el('btn-'+t).classList.remove('opacity-40'); el('btn-'+t).classList.add('border-b-2');
+        }
+        function el(id) { return document.getElementById(id); }
+    </script>
+</body>
+</html>
